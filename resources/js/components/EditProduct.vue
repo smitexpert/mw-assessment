@@ -31,7 +31,7 @@
 
             <div class="col-md-6">
                 <div class="card shadow mb-4">
-                    <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <!-- <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
                         <h6 class="m-0 font-weight-bold text-primary">Variants</h6>
                     </div>
                     <div class="card-body">
@@ -57,10 +57,10 @@
                                 </div>
                             </div>
                         </div>
-                    </div>
-                    <div class="card-footer" v-if="product_variant.length < variants.length && product_variant.length < 3">
+                    </div> -->
+                    <!-- <div class="card-footer" v-if="product_variant.length < variants.length && product_variant.length < 3">
                         <button @click="newVariant" class="btn btn-primary">Add another option</button>
-                    </div>
+                    </div> -->
 
                     <div class="card-header text-uppercase">Preview</div>
                     <div class="card-body">
@@ -110,6 +110,12 @@ export default {
         variants: {
             type: Array,
             required: true
+        },
+        product: {
+            type: Object
+        },
+        variationsprice: {
+            type: Array
         }
     },
     data() {
@@ -196,7 +202,7 @@ export default {
             }
 
 
-            axios.post('/product', product).then(response => {
+            axios.put(`/product/${this.product.id}`, product).then(response => {
                 console.log(response.data);
                 window.location.replace('/product');
             }).catch(error => {
@@ -209,7 +215,33 @@ export default {
 
     },
     mounted() {
+        if(this.product)
+        {
+            this.product_name = this.product.title;
+            this.product_sku = this.product.sku;
+            this.description = this.product.description;
+        }
 
+        // console.log(this.variationsprice);
+        this.variationsprice.map((item, index) => {
+            var tags = '';
+
+            if(item.variant_one != '')
+                tags = tags+item.variant_one.variant+'/';// tags.concat(item.variant_one.variant+'/')
+            if(item.variant_two != '')
+                tags = tags+item.variant_two.variant+'/';
+            if(item.variant_three != '')
+                tags = tags+item.variant_three.variant+'/';
+
+            // console.log(item.variant_one.variant);
+
+            this.product_variant_prices.push({
+                id: item.id,
+                title: tags,
+                price: item.price,
+                stock: item.stock
+            })
+        })
     }
 }
 </script>

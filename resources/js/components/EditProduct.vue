@@ -31,7 +31,7 @@
 
             <div class="col-md-6">
                 <div class="card shadow mb-4">
-                    <!-- <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
                         <h6 class="m-0 font-weight-bold text-primary">Variants</h6>
                     </div>
                     <div class="card-body">
@@ -57,10 +57,10 @@
                                 </div>
                             </div>
                         </div>
-                    </div> -->
-                    <!-- <div class="card-footer" v-if="product_variant.length < variants.length && product_variant.length < 3">
+                    </div>
+                    <div class="card-footer" v-if="product_variant.length < variants.length && product_variant.length < 3">
                         <button @click="newVariant" class="btn btn-primary">Add another option</button>
-                    </div> -->
+                    </div>
 
                     <div class="card-header text-uppercase">Preview</div>
                     <div class="card-body">
@@ -116,7 +116,8 @@ export default {
         },
         variationsprice: {
             type: Array
-        }
+        },
+        productvariants: {}
     },
     data() {
         return {
@@ -125,10 +126,6 @@ export default {
             description: '',
             images: [],
             product_variant: [
-                {
-                    option: this.variants[0].id,
-                    tags: []
-                }
             ],
             product_variant_prices: [],
             dropzoneOptions: {
@@ -192,6 +189,15 @@ export default {
 
         // store product into database
         saveProduct() {
+            // let product = {
+            //     title: this.product_name,
+            //     sku: this.product_sku,
+            //     description: this.description,
+            //     product_image: this.images,
+            //     product_variant: this.product_variant,
+            //     product_variant_prices: this.product_variant_prices
+            // }
+
             let product = {
                 title: this.product_name,
                 sku: this.product_sku,
@@ -200,7 +206,6 @@ export default {
                 product_variant: this.product_variant,
                 product_variant_prices: this.product_variant_prices
             }
-
 
             axios.put(`/product/${this.product.id}`, product).then(response => {
                 console.log(response.data);
@@ -215,6 +220,7 @@ export default {
 
     },
     mounted() {
+        console.log(this.productvariants);
         if(this.product)
         {
             this.product_name = this.product.title;
@@ -222,26 +228,30 @@ export default {
             this.description = this.product.description;
         }
 
-        // console.log(this.variationsprice);
-        this.variationsprice.map((item, index) => {
-            var tags = '';
+        this.variants.forEach((item) => {
+            let variant = this.productvariants.filter(varId => varId.variant_id == item.id);
+            if (variant.length) {
+                let productVarient = {
+                    option: item.id,
+                    tags: variant.map(element => element.variant)
+                }
+                this.product_variant.push(productVarient);
+            }
+        });
+        this.checkVariant();
 
-            if(item.variant_one != '')
-                tags = tags+item.variant_one.variant+'/';// tags.concat(item.variant_one.variant+'/')
-            if(item.variant_two != '')
-                tags = tags+item.variant_two.variant+'/';
-            if(item.variant_three != '')
-                tags = tags+item.variant_three.variant+'/';
+        for (let i = 0; i < this.product_variant_prices.length; i++) {
+            this.product_variant_prices[i].price = this.variationsprice[i].price;
+            this.product_variant_prices[i].stock = this.variationsprice[i].stock;
+        }
 
-            // console.log(item.variant_one.variant);
+        this.product.images.forEach((item, index) => {
+            let file = {size: 123, name: `${this.product_name}-${index + 1}`, type: "image/png"},
+                url = `/${item.file_path}`;
+            this.$refs.myVueDropzone.manuallyAddFile(file, item.file_path);
 
-            this.product_variant_prices.push({
-                id: item.id,
-                title: tags,
-                price: item.price,
-                stock: item.stock
-            })
-        })
+            console.log(item);
+        });
     }
 }
 </script>

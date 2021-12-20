@@ -7,6 +7,8 @@ use App\Models\ProductImage;
 use App\Models\ProductVariant;
 use App\Models\ProductVariantPrice;
 use App\Models\Variant;
+use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
 class ProductController extends Controller
@@ -18,52 +20,23 @@ class ProductController extends Controller
      */
     public function index(Request $request)
     {
-        $products = Product::query();
-        // $products->
-
-        if($request->has('title') && ($request->title != ''))
-        {
-            $products->where('title', 'LIKE', '%'.$request->title.'%');
-        }
-
-        if($request->has('variant') && ($request->variant != ''))
-        {
-            $variant = $request->variant;
-            $products->whereHas('productVariants', function($q) use ($variant) {
-                $q->where('variant', $variant);
-            });
-        }
-
-
-        if($request->has('price_from') && ($request->price_from != ''))
-        {
-            $price = $request->price_from;
-            $products->with(['variantPrices' => function($q) use ($price) {
-                return $q->where('price', '>=', $price);
-            }])->whereHas('variantPrices', function($q) use ($price) {
-                $q->where('price', '>=', $price);
-            });
-        }
-
-        if($request->has('price_to') && ($request->price_to != ''))
-        {
-            $price = $request->price_to;
-            $products->with(['variantPrices' => function($q) use ($price) {
-                return $q->where('price', '<=', $price);
-            }])->whereHas('variantPrices', function($q) use ($price) {
-                $q->where('price', '<=', $price);
-            });
-        }
-
-        if($request->has('date') && ($request->date != ''))
-        {
-            $products->whereDate('created_at', $request->date);
-        }
-
+        $products = Product::with('productVariants', 'variantPrices')
+            ->when(request()->get('title'), function (Builder $builder) {
+                $builder->where('title', 'LIKE', '%' . request()->get('title') . '%');
+            })->when(request()->get('variant'), function (Builder $builder) {
+                $builder->whereHas('productVariants', function (Builder $builder) {
+                    $builder->where('variant', 'LIKE', '%' . request()->get('variant') . '%');
+                });
+            })->when(request()->get('price_from'), function (Builder $builder) {
+                $builder->whereHas('variantPrices', function (Builder $builder) {
+                    $builder->whereBetween('price', [request()->get('price_from'), request()->get('price_to')]);
+                });
+            })->when(request()->get('date'), function (Builder $builder) {
+                $builder->whereDate('created_at', '=', Carbon::parse(request()->get('date'))->format('Y-m-d'));
+            })->paginate(2);
 
         $variants = Variant::all();
 
-        $products = $products->with('variantPrices.variantOne', 'variantPrices.variantTwo', 'variantPrices.variantThree')->paginate(5);
         return view('products.index', compact('products', 'variants'));
     }
 
@@ -131,25 +104,14 @@ class ProductController extends Controller
             ProductVariantPrice::create($variation);
         }
 
-        $s = 0;
+
         foreach($request->product_image as $image)
         {
-            if($s == 0)
-            {
-                ProductImage::create([
-                    'product_id' => $product->id,
-                    'file_path' => $image,
-                    'thumbnail' => true
-                ]);
-            }else{
-                ProductImage::create([
-                    'product_id' => $product->id,
-                    'file_path' => $image,
-                    'thumbnail' => false
-                ]);
-            }
-
-            $s++;
+            ProductImage::create([
+                'product_id' => $product->id,
+                'file_path' => $image,
+                'thumbnail' => true
+            ]);
         }
 
         // return $request->file('product_image');
@@ -197,8 +159,11 @@ class ProductController extends Controller
     {
         $variants = Variant::all();
         $productVariationPrice = ProductVariantPrice::with('variantOne', 'variantTwo', 'variantThree')->where('product_id', $product->id)->get();
-        // return $productVariationPrice;
-        return view('products.edit', compact('variants', 'product', 'productVariationPrice'));
+        $productVariants = ProductVariant::where('product_id', $product->id)->get();
+
+        $product = $product->load(['images']);
+
+        return view('products.edit', compact('variants', 'product', 'productVariationPrice', 'productVariants'));
     }
 
     /**
@@ -220,34 +185,56 @@ class ProductController extends Controller
         {
             ProductImage::where('product_id', $product->id)->delete();
 
-            $s = 0;
             foreach($request->product_image as $image)
             {
-                if($s == 0)
-                {
-                    ProductImage::create([
-                        'product_id' => $product->id,
-                        'file_path' => $image,
-                        'thumbnail' => true
-                    ]);
-                }else{
-                    ProductImage::create([
-                        'product_id' => $product->id,
-                        'file_path' => $image,
-                        'thumbnail' => false
-                    ]);
-                }
-
-                $s++;
+                ProductImage::create([
+                    'product_id' => $product->id,
+                    'file_path' => $image,
+                    'thumbnail' => true
+                ]);
             }
         }
 
-        foreach($request->product_variant_prices as $variant)
+        ProductVariant::where('product_id', $product->id)->delete();
+
+        foreach($request->product_variant as $variants)
         {
-            ProductVariantPrice::where('id', $variant['id'])->update([
-                'price' => $variant['price'],
-                'stock' => $variant['stock']
-            ]);
+            foreach($variants['tags'] as $variant)
+            {
+                ProductVariant::create([
+                    'variant_id' => $variants['option'],
+                    'product_id' => $product->id,
+                    'variant' => $variant
+                ]);
+            }
+        }
+
+        ProductVariantPrice::where('product_id', $product->id)->delete();
+
+        foreach($request->product_variant_prices as $variant_price)
+        {
+            $variation = [];
+            $tags  = explode("/", $variant_price['title']);
+
+            for($i=0; $i<count($tags)-1; $i++)
+            {
+                $product_variant = ProductVariant::where('variant', $tags[$i])->where('product_id', $product->id)->first();
+
+
+
+                if($i==0)
+                    $variation['product_variant_one'] = $product_variant->id;
+                else if($i==1)
+                    $variation['product_variant_two'] = $product_variant->id;
+                else if($i==2)
+                    $variation['product_variant_three'] = $product_variant->id;
+            }
+
+            $variation['price'] = $variant_price['price'];
+            $variation['stock'] = $variant_price['stock'];
+            $variation['product_id'] = $product->id;
+
+            ProductVariantPrice::create($variation);
         }
 
         return response()->json([

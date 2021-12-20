@@ -5,6 +5,7 @@
         <h1 class="h3 mb-0 text-gray-800">Edit Product</h1>
     </div>
     <div id="app">
-        <edit-product :variants="{{ $variants }}" :product="{{ $product }}" :variationsprice="{{ $productVariationPrice }}">Loading</edit-product>
+
+        <edit-product :variants="{{ $variants }}" :product="{{ $product }}" :variationsprice="{{ $productVariationPrice }}" :productvariants="{{ $productVariants }}">Loading</edit-product>
     </div>
 @endsection
